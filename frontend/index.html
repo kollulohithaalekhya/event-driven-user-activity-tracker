@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>User Activity Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      padding: 40px;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: #ffffff;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 15px;
+    }
+
+    input, textarea, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      font-size: 14px;
+    }
+
+    textarea {
+      resize: vertical;
+    }
+
+    button {
+      margin-top: 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    button:hover {
+      background-color: #0056b3;
+    }
+
+    .response {
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 4px;
+    }
+
+    .success {
+      background: #e6fffa;
+      color: #065f46;
+    }
+
+    .error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h2>User Activity Tracker</h2>
+
+    <label>User ID</label>
+    <input type="number" id="user_id" placeholder="e.g. 101" />
+
+    <label>Event Type</label>
+    <input type="text" id="event_type" placeholder="e.g. login, signup" />
+
+    <label>Metadata (JSON)</label>
+    <textarea id="metadata" rows="4">
+{"source":"web"}
+    </textarea>
+
+    <button onclick="sendEvent()">Send Event</button>
+
+    <div id="response"></div>
+  </div>
+
+  <script>
+    async function sendEvent() {
+      const userId = document.getElementById("user_id").value;
+      const eventType = document.getElementById("event_type").value;
+      const metadataText = document.getElementById("metadata").value;
+      const responseDiv = document.getElementById("response");
+
+      responseDiv.innerHTML = "";
+
+      let metadata;
+      try {
+        metadata = JSON.parse(metadataText);
+      } catch (e) {
+        responseDiv.innerHTML = "<div class='response error'>Invalid JSON in metadata</div>";
+        return;
+      }
+
+      const payload = {
+        user_id: Number(userId),
+        event_type: eventType,
+        timestamp: new Date().toISOString(),
+        metadata: metadata
+      };
+
+      try {
+        const res = await fetch("http://localhost:8000/api/v1/events/track", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          responseDiv.innerHTML =
+            "<div class='response success'>" + data.message + "</div>";
+        } else {
+          responseDiv.innerHTML =
+            "<div class='response error'>" + (data.detail || "Error occurred") + "</div>";
+        }
+
+      } catch (err) {
+        responseDiv.innerHTML =
+          "<div class='response error'>Could not reach producer service</div>";
+      }
+    }
+  </script>
+
+</body>
+</html>

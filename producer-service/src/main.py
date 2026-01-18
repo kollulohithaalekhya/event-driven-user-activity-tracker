@@ -1,4 +1,3 @@
-import json
 import os
 from datetime import datetime
 from typing import Optional, Dict, Any
@@ -28,7 +27,7 @@ def health_check():
     return {"status": "ok"}
 
 
-def publish_event(event: dict):
+def publish_event(event_json: str):
     try:
         connection = pika.BlockingConnection(
             pika.ConnectionParameters(
@@ -38,15 +37,14 @@ def publish_event(event: dict):
         )
         channel = connection.channel()
 
-        # Ensure queue exists
         channel.queue_declare(queue=QUEUE_NAME, durable=True)
 
         channel.basic_publish(
             exchange="",
             routing_key=QUEUE_NAME,
-            body=json.dumps(event),
+            body=event_json,  
             properties=pika.BasicProperties(
-                delivery_mode=2  # make message persistent
+                delivery_mode=2  
             ),
         )
 
@@ -59,7 +57,7 @@ def publish_event(event: dict):
 @app.post("/api/v1/events/track", status_code=202)
 def track_event(event: UserActivityEvent):
     try:
-        publish_event(json.loads(event.json()))
+        publish_event(event.json())
         return {"message": "Event accepted for processing"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

@@ -7,6 +7,7 @@ import pika
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
 RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))
 QUEUE_NAME = "user_activity_events"
@@ -37,6 +38,7 @@ def publish_event(event: dict):
         )
         channel = connection.channel()
 
+        # Ensure queue exists
         channel.queue_declare(queue=QUEUE_NAME, durable=True)
 
         channel.basic_publish(
@@ -44,7 +46,7 @@ def publish_event(event: dict):
             routing_key=QUEUE_NAME,
             body=json.dumps(event),
             properties=pika.BasicProperties(
-                delivery_mode=2 
+                delivery_mode=2  # make message persistent
             ),
         )
 
@@ -57,7 +59,7 @@ def publish_event(event: dict):
 @app.post("/api/v1/events/track", status_code=202)
 def track_event(event: UserActivityEvent):
     try:
-        publish_event(event.dict())
+        publish_event(json.loads(event.json()))
         return {"message": "Event accepted for processing"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

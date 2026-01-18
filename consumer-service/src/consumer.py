@@ -6,7 +6,17 @@ from datetime import datetime
 
 import pika
 from fastapi import FastAPI
-from sqlalchemy import create_engine, Table, Column, Integer, String, DateTime, MetaData, JSON
+from sqlalchemy import (
+    create_engine,
+    Table,
+    Column,
+    Integer,
+    String,
+    DateTime,
+    MetaData,
+    JSON,
+    text,
+)
 from sqlalchemy.orm import sessionmaker
 
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
@@ -19,14 +29,13 @@ MYSQL_USER = os.getenv("MYSQL_USER", "root")
 MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "root_password")
 MYSQL_DB = os.getenv("MYSQL_DB", "user_activity_db")
 
-
 DATABASE_URL = (
     f"mysql+mysqlconnector://{MYSQL_USER}:{MYSQL_PASSWORD}"
     f"@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}"
 )
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(bind=engine)
+engine = None
+SessionLocal = None
 
 metadata = MetaData()
 
@@ -47,6 +56,26 @@ app = FastAPI(title="User Activity Consumer Service")
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+def init_db():
+    global engine, SessionLocal
+
+    while True:
+        try:
+            engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+            SessionLocal = sessionmaker(bind=engine)
+
+            # Test DB connection
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+
+            print("Connected to MySQL successfully")
+            break
+
+        except Exception as exc:
+            print(f"MySQL not ready: {exc}. Retrying in 5 seconds...")
+            time.sleep(5)
 
 
 def process_message(body: bytes):
@@ -77,18 +106,23 @@ def on_message(channel, method, properties, body):
         print(f"Error processing message: {exc}")
         channel.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
-
 def start_consumer():
     while True:
         try:
             connection = pika.BlockingConnection(
-                pika.ConnectionParameters(host=RABBITMQ_HOST, port=RABBITMQ_PORT)
+                pika.ConnectionParameters(
+                    host=RABBITMQ_HOST,
+                    port=RABBITMQ_PORT,
+                )
             )
             channel = connection.channel()
             channel.queue_declare(queue=QUEUE_NAME, durable=True)
 
             channel.basic_qos(prefetch_count=1)
-            channel.basic_consume(queue=QUEUE_NAME, on_message_callback=on_message)
+            channel.basic_consume(
+                queue=QUEUE_NAME,
+                on_message_callback=on_message,
+            )
 
             print("Consumer started. Waiting for messages...")
             channel.start_consuming()
@@ -100,5 +134,6 @@ def start_consumer():
 
 @app.on_event("startup")
 def startup_event():
+    init_db()
     thread = threading.Thread(target=start_consumer, daemon=True)
     thread.start()
